@@ -19,7 +19,7 @@
     {
       "route": "free-zen",
       "displayName": "free-zen",
-      "apiKeyEnv": "free-zen",
+      "apiKeyEnv": "FREE_ZEN_API_KEY",
       "api": "openai-completions",
       "baseURL": "https://opencode.ai/zen/v1",
       "key": "public",
