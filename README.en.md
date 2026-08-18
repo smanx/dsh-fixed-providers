@@ -111,9 +111,7 @@ fields are restored on the next settings change (or restart).
 **Option A — online (git repository)**
 
 ```sh
-dsh plugin --profile web add git@github.com:smanx/dsh-fixed-providers.git
-# or the pnpm GitHub shorthand:
-# dsh plugin --profile web add github:smanx/dsh-fixed-providers
+dsh plugin --profile web add github:smanx/dsh-fixed-providers#master
 ```
 
 **Option B — from the source checkout (local development)**
