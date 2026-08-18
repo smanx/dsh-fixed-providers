@@ -82,7 +82,15 @@
 
 ## 安装
 
-从源码目录安装（本地开发）：
+**方式一：在线安装（Git 仓库）**
+
+```sh
+dsh plugin --profile web add git@github.com:smanx/dsh-fixed-providers.git
+# 或使用 pnpm 的 GitHub 简写：
+# dsh plugin --profile web add github:smanx/dsh-fixed-providers
+```
+
+**方式二：从源码目录安装（本地开发）**
 
 ```sh
 dsh plugin --profile web add file:C:/mydata/codes/dsh-fixed-providers

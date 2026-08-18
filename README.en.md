@@ -108,7 +108,15 @@ fields are restored on the next settings change (or restart).
 
 ## Install
 
-From the source checkout (local development):
+**Option A — online (git repository)**
+
+```sh
+dsh plugin --profile web add git@github.com:smanx/dsh-fixed-providers.git
+# or the pnpm GitHub shorthand:
+# dsh plugin --profile web add github:smanx/dsh-fixed-providers
+```
+
+**Option B — from the source checkout (local development)**
 
 ```sh
 dsh plugin --profile web add file:C:/mydata/codes/dsh-fixed-providers
