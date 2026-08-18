@@ -1,0 +1,8 @@
+# @smanx/dsh-fixed-providers bundle patch: mount the plugin under its package
+# name, resolved through the profile's node_modules. The host half seeds and
+# guards the two managed provider profiles inside the llm-pi-ai settings
+# namespace; the client half (lib/client.js) locks the URL/key fields of those
+# providers in the web Models page.
+- insert:
+    - id: "@smanx/dsh-fixed-providers"
+      name: "@smanx/dsh-fixed-providers"

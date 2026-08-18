@@ -1,0 +1,12 @@
+{
+  "name": "@smanx/dsh-fixed-providers",
+  "description": "Two built-in managed providers (fixed URL + key, editable model lists only)",
+  "version": "0.1.0",
+  "entry": {
+    "name": "@smanx/dsh-fixed-providers",
+    "inject": []
+  },
+  "client": {
+    "platform": "web"
+  }
+}

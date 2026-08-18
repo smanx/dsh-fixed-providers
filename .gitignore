@@ -1,0 +1,19 @@
+# Dependencies
+node_modules/
+
+# Build output (lib/ is committed on purpose — the web server serves
+# lib/client.js from disk; keep build artifacts out of ignore)
+# dist/
+coverage/
+
+# Tests (fixtures contain concrete provider URLs / routes / model ids)
+tests/
+
+# Logs & OS noise
+*.log
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
