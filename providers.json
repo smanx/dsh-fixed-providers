@@ -9,10 +9,12 @@
       "baseURL": "https://openai.good.hidns.vip/v1",
       "key": "https://github.com/smanx/free-api",
       "models": [
+        { "id": "moonshotai/kimi-k3", "contextWindow": 1000000, "maxTokens": 200000, "input": ["text", "image"] },
         { "id": "deepseek-ai/deepseek-v4-flash-0731", "contextWindow": 1000000, "maxTokens": 200000 },
         { "id": "minimaxai/minimax-m3", "contextWindow": 1000000, "maxTokens": 200000, "input": ["text", "image"] },
         { "id": "z-ai/glm-5.2" },
         { "id": "stepfun-ai/step-3.7-flash" },
+        { "id": "nvidia/nemotron-3-ultra-550b-a55b" },
         { "id": "ai-model" }
       ]
     },
@@ -24,12 +26,14 @@
       "baseURL": "https://opencode.ai/zen/v1",
       "key": "public",
       "models": [
-        { "id": "deepseek-v4-flash-free", "contextWindow": 200000, "maxTokens": 128000 },
+        { "id": "deepseek-v4-flash-free"},
         { "id": "mimo-v2.5-free"},
         { "id": "hy3-free"},
+        { "id": "muse-spark-1.2-contributor-free"},
         { "id": "nemotron-3-ultra-free"},
         { "id": "nemotron-3.5-lightning-free"},
-        { "id": "laguna-s-2.1-free"}
+        { "id": "laguna-s-2.1-free"},
+        { "id": "x-preview-f-free"}
       ]
     }
   ]
