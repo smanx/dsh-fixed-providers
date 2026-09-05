@@ -22,7 +22,7 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import { credentialRef, type CredentialProvider, type CredentialRef } from '@deepseek-ai/dsh-credentials'
-import { settingsNamespace, type SettingsProvider } from '@deepseek-ai/dsh-settings'
+import { type SettingsProvider } from '@deepseek-ai/dsh-settings'
 // Type-only import: activates the `ctx.webServer` augmentation.
 import type {} from '@deepseek-ai/dsh-host-webserver'
 import type { IncomingMessage, ServerResponse } from 'node:http'
@@ -36,7 +36,7 @@ export const name = '@smanx/dsh-fixed-providers'
 export const inject: readonly string[] = []
 
 /** The settings namespace the managed profiles live in (owned by llm-pi-ai). */
-const NS = settingsNamespace('llm-pi-ai')
+const NS = 'llm-pi-ai'
 
 /** Endpoint serving the client-safe managed provider list. */
 export const MANAGED_ENDPOINT = '/dsh-fixed-providers/managed.json'
