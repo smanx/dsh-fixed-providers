@@ -8,6 +8,11 @@
  * (the local document wins on conflicts) and the result is the fixed set the
  * plugin seeds and guards.
  *
+ * A provider listed in {@link UPSTREAM_MODEL_CATALOG} (currently only
+ * `free-zen`) does not use its configured `models` verbatim: its catalog is
+ * fetched from the provider's upstream `/models` endpoint and filtered, with
+ * the configured list kept as the fallback.
+ *
  * Document shape (both local and remote):
  * ```json
  * {
@@ -56,6 +61,12 @@ export interface FixedProvider {
   /** Fixed credential value; absent when the key is environment-provided. */
   key?: string
   defaultModels: readonly FixedModel[]
+  /**
+   * True when the model catalog is fetched from the upstream `/models`
+   * endpoint rather than the configured `models` list; the guard then
+   * re-asserts `models` too, and the client locks the model editor.
+   */
+  dynamicModels: boolean
 }
 
 /** A raw provider entry as read from a JSON document. */
@@ -77,11 +88,26 @@ export interface ProviderDocument {
 
 /** The safe view served to the browser client (no secrets). */
 export interface ManagedView {
-  providers: readonly { route: string; displayName: string }[]
+  providers: readonly { route: string; displayName: string; modelsLocked: boolean }[]
 }
 
 const DEFAULT_API = 'openai-completions'
 const REMOTE_FETCH_TIMEOUT_MS = 10_000
+
+/**
+ * Providers whose model catalog is fetched from the upstream `/models`
+ * endpoint instead of the configured `models` list, keyed by route. Only the
+ * free-zen gateway is listed: it publishes its free tier under ids ending in
+ * `-free`, and that set changes upstream without notice. The configured
+ * `models` list stays as the fallback for a failed or empty fetch.
+ */
+export const UPSTREAM_MODEL_CATALOG: Readonly<Record<string, { path: string; filter: RegExp }>> = {
+  'free-zen': { path: '/models', filter: /-free$/ },
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
 
 /** Conventional credential reference for a route (`llm-proxy` → `LLM_PROXY_API_KEY`). */
 export function deriveKeyRef(route: string): string {
@@ -119,6 +145,7 @@ export function normalizeEntry(entry: ProviderEntry, index: number): FixedProvid
     baseURL,
     ...typeof entry?.key === 'string' && entry.key.length > 0 ? { key: entry.key } : {},
     defaultModels: models.map((model) => ({ ...model, id: model.id.trim() })),
+    dynamicModels: UPSTREAM_MODEL_CATALOG[route] !== undefined,
   }
 }
 
@@ -204,6 +231,89 @@ async function fetchRemoteDocument(url: string, logger: { warn: (...args: unknow
   }
 }
 
+/** Join a provider base URL and an endpoint path without doubling the slash. */
+function modelsEndpoint(baseURL: string, path: string): string {
+  const base = baseURL.replace(/\/+$/, '')
+  const suffix = path.startsWith('/') ? path : `/${path}`
+  return `${base}${suffix}`
+}
+
+/** Extract the model ids from an OpenAI-compatible `/models` payload. */
+function extractModelIds(payload: unknown): string[] {
+  const list = Array.isArray(payload)
+    ? payload
+    : isRecord(payload) && Array.isArray(payload['data'])
+      ? payload['data']
+      : isRecord(payload) && Array.isArray(payload['models'])
+        ? payload['models']
+        : undefined
+  if (list === undefined) return []
+  const ids: string[] = []
+  for (const item of list) {
+    const id = typeof item === 'string'
+      ? item
+      : isRecord(item) && typeof item['id'] === 'string'
+        ? item['id']
+        : undefined
+    if (id !== undefined && id.trim().length > 0) ids.push(id.trim())
+  }
+  return [...new Set(ids)]
+}
+
+/**
+ * Fetch and filter one provider's model catalog from its upstream `/models`
+ * endpoint; resolves undefined on any failure so the caller keeps the
+ * configured `models` as the fallback.
+ */
+async function fetchUpstreamModels(
+  provider: FixedProvider,
+  rule: { path: string; filter: RegExp },
+  logger: { warn: (...args: unknown[]) => void },
+): Promise<FixedModel[] | undefined> {
+  const url = modelsEndpoint(provider.baseURL, rule.path)
+  const key = provider.key ?? process.env[provider.apiKeyEnv]
+  try {
+    const response = await fetch(url, {
+      headers: {
+        accept: 'application/json',
+        ...key !== undefined && key.length > 0 ? { authorization: `Bearer ${key}` } : {},
+      },
+      signal: AbortSignal.timeout(REMOTE_FETCH_TIMEOUT_MS),
+    })
+    if (!response.ok) {
+      logger.warn(`dsh-fixed-providers: upstream model catalog ${url} answered ${String(response.status)}; keeping the configured models`)
+      return undefined
+    }
+    const ids = extractModelIds(await response.json()).filter((id) => rule.filter.test(id))
+    if (ids.length === 0) {
+      logger.warn(`dsh-fixed-providers: upstream model catalog ${url} matched no model for ${String(rule.filter)}; keeping the configured models`)
+      return undefined
+    }
+    return ids.map((id) => ({ id }))
+  } catch (error) {
+    logger.warn(`dsh-fixed-providers: could not fetch the upstream model catalog ${url}; keeping the configured models`)
+    logger.warn(error)
+    return undefined
+  }
+}
+
+/**
+ * Replace the model catalog of every upstream-sourced provider with the live
+ * list from its `/models` endpoint. A provider whose fetch fails — or whose
+ * filter matches nothing — keeps its configured `models` list.
+ */
+export async function resolveDynamicModels(
+  providers: readonly FixedProvider[],
+  logger: { warn: (...args: unknown[]) => void },
+): Promise<FixedProvider[]> {
+  return Promise.all(providers.map(async (provider) => {
+    const rule = UPSTREAM_MODEL_CATALOG[provider.route]
+    if (rule === undefined) return provider
+    const models = await fetchUpstreamModels(provider, rule, logger)
+    return models === undefined ? provider : { ...provider, defaultModels: models }
+  }))
+}
+
 export interface LoadConfigOptions {
   /** The harness home directory; defaults to `resolveDshHome()`. */
   dshHome?: string
@@ -257,11 +367,13 @@ export async function loadConfig(
   const remoteUrl = typeof localDoc.remoteUrl === 'string' && localDoc.remoteUrl.trim().length > 0 ? localDoc.remoteUrl.trim() : undefined
   const remoteDoc = remoteUrl !== undefined ? await fetchRemoteDocument(remoteUrl, logger) : undefined
 
+  const merged = mergeProviders(localDoc.providers ?? [], remoteDoc?.providers ?? [], (error) => {
+    logger.warn('dsh-fixed-providers: skipped an invalid provider entry from the remote document')
+    logger.warn(error)
+  })
+
   return {
-    providers: mergeProviders(localDoc.providers ?? [], remoteDoc?.providers ?? [], (error) => {
-      logger.warn('dsh-fixed-providers: skipped an invalid provider entry from the remote document')
-      logger.warn(error)
-    }),
+    providers: await resolveDynamicModels(merged, logger),
     ...localSource === userPath ? { remoteUrl } : {},
   }
 }
@@ -269,6 +381,10 @@ export async function loadConfig(
 /** The client-safe view of the managed providers (routes + display names only). */
 export function managedView(providers: readonly FixedProvider[]): ManagedView {
   return {
-    providers: providers.map((provider) => ({ route: provider.route, displayName: provider.displayName })),
+    providers: providers.map((provider) => ({
+      route: provider.route,
+      displayName: provider.displayName,
+      modelsLocked: provider.dynamicModels,
+    })),
   }
 }

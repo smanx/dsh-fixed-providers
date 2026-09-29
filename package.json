@@ -1,6 +1,6 @@
 {
   "name": "@smanx/dsh-fixed-providers",
-  "description": "Managed built-in LLM providers for DeepSeek Harness: two OpenAI-compatible providers with plugin-locked base URL and API key, editable model lists only.",
+  "description": "Managed built-in LLM providers for DeepSeek Harness: OpenAI-compatible providers with plugin-locked base URL and API key; model lists are editable except free-zen's, which is fetched from upstream.",
   "version": "0.1.0",
   "license": "MIT",
   "type": "module",

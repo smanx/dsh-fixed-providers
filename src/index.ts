@@ -6,15 +6,18 @@
  * `providers.json` in the package) merged with an optional remote JSON
  * document fetched over HTTP (see src/config.ts). At startup the plugin:
  *
- * 1. **Loads and merges** the provider configuration (local wins on conflicts).
+ * 1. **Loads and merges** the provider configuration (local wins on conflicts)
+ *    and resolves each upstream-sourced provider's model catalog.
  * 2. **Seeds** the merged providers into the `llm-pi-ai` settings namespace
  *    (served by the stock pi-ai adapter) with their fixed
  *    `displayName` / `apiKeyEnv` / `api` / `baseURL`, and stores the fixed API
  *    keys through the credentials seam.
  * 3. **Guards** — on every `settings/updated` for `llm-pi-ai` it re-asserts
  *    the protected fields (reverting edits and re-creating deleted routes),
- *    and on every `credentials/updated` it restores the fixed keys. The user's
- *    `models` list of each managed provider is never touched.
+ *    and on every `credentials/updated` it restores the fixed keys. A static
+ *    provider's `models` list is never touched; an upstream-sourced provider
+ *    (`dynamicModels`) has its `models` re-asserted too, so its catalog keeps
+ *    tracking the upstream `/models` endpoint.
  * 4. **Serves** a client-safe JSON list of the managed providers (routes +
  *    display names only, no secrets) so the browser half can lock their
  *    URL/key inputs in the Models page.

@@ -4,10 +4,11 @@
  *
  * The managed set is dynamic (local JSON + remote JSON merged host-side), so
  * this half fetches the client-safe list the host serves at
- * `/dsh-fixed-providers/managed.json` ({ providers: [{route, displayName}] })
- * and locks every row card whose display name is on that list. The server-side
- * guard (src/index.ts) enforces the same boundary authoritatively; this half
- * makes it visible and un-editable in the UI.
+ * `/dsh-fixed-providers/managed.json`
+ * ({ providers: [{route, displayName, modelsLocked}] }) and locks every row
+ * card whose display name is on that list. The server-side guard
+ * (src/index.ts) enforces the same boundary authoritatively; this half makes
+ * it visible and un-editable in the UI.
  */
 
 import { scanLocked, type LockTarget } from './lock.ts'
@@ -57,11 +58,15 @@ async function refreshTargets(): Promise<void> {
     const providers = typeof data === 'object' && data !== null ? (data as { providers?: unknown }).providers : undefined
     if (!Array.isArray(providers)) throw new Error('malformed managed list')
     const next = providers
-      .filter((entry): entry is { route: unknown; displayName: unknown } =>
+      .filter((entry): entry is { route: unknown; displayName: unknown; modelsLocked?: unknown } =>
         typeof entry === 'object' && entry !== null &&
         typeof (entry as { route?: unknown }).route === 'string' &&
         typeof (entry as { displayName?: unknown }).displayName === 'string')
-      .map((entry) => ({ route: entry.route as string, displayName: entry.displayName as string }))
+      .map((entry) => ({
+        route: entry.route as string,
+        displayName: entry.displayName as string,
+        modelsLocked: entry.modelsLocked === true,
+      }))
     targets = next
     targetsReady = true
     if (refreshTimer !== undefined) clearInterval(refreshTimer)

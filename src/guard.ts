@@ -32,18 +32,31 @@ export function fixedProfile(fixed: FixedProvider): Record<string, unknown> {
 
 /**
  * The settings profile fields this plugin re-asserts on every change.
- * Everything else in a managed profile — most importantly `models` — is left
- * to the user.
+ * Everything else in a managed profile — most importantly `models` for a
+ * static provider — is left to the user.
  */
 export const PROTECTED_KEYS = ['displayName', 'apiKeyEnv', 'api', 'baseURL'] as const
+
+/** A key-order-insensitive rendering of a model list, for equality checks. */
+function canonicalModels(value: unknown): string {
+  if (!Array.isArray(value)) return JSON.stringify(value ?? null)
+  return JSON.stringify(value.map((model) => {
+    if (!isRecord(model)) return model
+    const ordered: Record<string, unknown> = {}
+    for (const key of Object.keys(model).sort()) ordered[key] = model[key]
+    return ordered
+  }))
+}
 
 /**
  * Compute the ops that make `providers` match the fixed state.
  *
  * - A missing managed route is recreated wholesale (with the default models).
  * - A present route's protected fields are re-asserted one by one.
- * - Everything else — the user's `models` list, extra profile fields — is
- *   never touched.
+ * - For an upstream-sourced provider (`dynamicModels`) the `models` list is
+ *   re-asserted too, so the catalog keeps tracking the upstream endpoint.
+ * - Everything else — a static provider's `models` list, extra profile fields
+ *   — is never touched.
  *
  * @param providers - the resolved `providers` dict of `llm-pi-ai`.
  * @param fixed - the managed provider definitions to enforce.
@@ -69,6 +82,13 @@ export function enforceOps(providers: ProviderProfiles, fixed: readonly FixedPro
           value: provider[key],
         })
       }
+    }
+    if (provider.dynamicModels && canonicalModels(profile['models']) !== canonicalModels(provider.defaultModels)) {
+      ops.push({
+        op: 'set',
+        path: ['providers', provider.route, 'models'],
+        value: provider.defaultModels.map((model) => ({ ...model })),
+      })
     }
   }
   return ops

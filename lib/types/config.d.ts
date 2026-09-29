@@ -8,6 +8,11 @@
  * (the local document wins on conflicts) and the result is the fixed set the
  * plugin seeds and guards.
  *
+ * A provider listed in {@link UPSTREAM_MODEL_CATALOG} (currently only
+ * `free-zen`) does not use its configured `models` verbatim: its catalog is
+ * fetched from the provider's upstream `/models` endpoint and filtered, with
+ * the configured list kept as the fallback.
+ *
  * Document shape (both local and remote):
  * ```json
  * {
@@ -48,6 +53,12 @@ export interface FixedProvider {
     /** Fixed credential value; absent when the key is environment-provided. */
     key?: string;
     defaultModels: readonly FixedModel[];
+    /**
+     * True when the model catalog is fetched from the upstream `/models`
+     * endpoint rather than the configured `models` list; the guard then
+     * re-asserts `models` too, and the client locks the model editor.
+     */
+    dynamicModels: boolean;
 }
 /** A raw provider entry as read from a JSON document. */
 export interface ProviderEntry {
@@ -69,8 +80,20 @@ export interface ManagedView {
     providers: readonly {
         route: string;
         displayName: string;
+        modelsLocked: boolean;
     }[];
 }
+/**
+ * Providers whose model catalog is fetched from the upstream `/models`
+ * endpoint instead of the configured `models` list, keyed by route. Only the
+ * free-zen gateway is listed: it publishes its free tier under ids ending in
+ * `-free`, and that set changes upstream without notice. The configured
+ * `models` list stays as the fallback for a failed or empty fetch.
+ */
+export declare const UPSTREAM_MODEL_CATALOG: Readonly<Record<string, {
+    path: string;
+    filter: RegExp;
+}>>;
 /** Conventional credential reference for a route (`llm-proxy` → `LLM_PROXY_API_KEY`). */
 export declare function deriveKeyRef(route: string): string;
 /** Normalize one raw entry into the enforced provider shape; throws on invalid input. */
@@ -87,6 +110,14 @@ export declare function parseDocument(raw: unknown, source: string): ProviderDoc
  * loud). Duplicate routes within one document throw.
  */
 export declare function mergeProviders(local: readonly ProviderEntry[], remote?: readonly ProviderEntry[], onRemoteInvalid?: ((error: unknown) => void) | undefined): FixedProvider[];
+/**
+ * Replace the model catalog of every upstream-sourced provider with the live
+ * list from its `/models` endpoint. A provider whose fetch fails — or whose
+ * filter matches nothing — keeps its configured `models` list.
+ */
+export declare function resolveDynamicModels(providers: readonly FixedProvider[], logger: {
+    warn: (...args: unknown[]) => void;
+}): Promise<FixedProvider[]>;
 export interface LoadConfigOptions {
     /** The harness home directory; defaults to `resolveDshHome()`. */
     dshHome?: string;

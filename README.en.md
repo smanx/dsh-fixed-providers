@@ -5,7 +5,9 @@
 A **managed-provider** plugin for DeepSeek Harness: after installation and a
 web-server restart, the providers defined in JSON configuration appear in
 Settings → Models. Their base URL and API key are **locked (read-only)**; only
-each provider's **model list is user-editable**.
+each provider's **model list is user-editable** — except `free-zen`, whose
+catalog the plugin fetches from upstream and locks (see
+[Dynamic model catalog](#dynamic-model-catalog-free-zen)).
 
 Providers are configured through **JSON documents** — nothing is hard-coded in
 the plugin's source:
@@ -14,17 +16,21 @@ the plugin's source:
   by default, overridable at `$DSH_HOME/dsh-fixed-providers.json`);
 - it also fetches the **remote JSON** named by `remoteUrl` in the local file;
 - it **merges the providers from both documents** (deduplicated by route, local
-  wins), then seeds and locks them.
+  wins), then seeds and locks them;
+- for a dynamic provider such as `free-zen` it then fetches and filters the
+  model catalog from the provider's upstream `/models` endpoint.
 
 ```
 Plugin startup
   -> read local JSON ($DSH_HOME/dsh-fixed-providers.json, falling back to the shipped providers.json)
   -> fetch the remote JSON at remoteUrl (on failure, local-only)
   -> merge the providers of both documents (same route: local overrides remote)
+  -> for free-zen fetch upstream /models and keep the -free ids (falling back to the configured models)
   -> seed the merged result into llm-pi-ai settings (URL / key / protocol fixed) and store the fixed keys
   -> re-assert the protected fields on every settings change (edits/deletions are reverted)
-  -> the host serves a client-safe list of the managed providers (no secrets) and the client locks their rows
-  -> only the model lists stay editable
+  -> free-zen's catalog is re-asserted too (manual edits are reverted)
+  -> the host serves a client-safe list of the managed providers (no secrets); the client locks their rows
+  -> the other providers' model lists stay editable
 ```
 
 > The managed providers use **dedicated route ids**, so they **coexist without
@@ -70,7 +76,7 @@ Plugin startup
 | `providers[].api` | no | Wire protocol; defaults to `openai-completions` |
 | `providers[].apiKeyEnv` | no | Credential reference; defaults to the derived `<ROUTE>_API_KEY` |
 | `providers[].key` | no | The fixed key value; when present the plugin stores/restores it, otherwise the environment provides it |
-| `providers[].models` | no | Default model list (written only when the provider is first created; edit it in the UI afterwards) |
+| `providers[].models` | no | Default model list (written only when the provider is first created; edit it in the UI afterwards). For `free-zen` it is only the fallback used when the upstream fetch fails |
 
 ### Merge rules
 
@@ -82,26 +88,51 @@ Plugin startup
 - A failed remote fetch (network/timeout/non-200) only warns; the local result
   is used.
 
+### Dynamic model catalog (free-zen)
+
+`free-zen`'s `models` list is **not used verbatim** — it is the **fallback**.
+At startup (and on every settings change, when the guard re-asserts) the plugin:
+
+1. requests the upstream `{baseURL}/models` (`https://opencode.ai/zen/v1/models`)
+   with `Authorization: Bearer <key>`;
+2. reads every model id from the OpenAI-shaped `{ data: [{ id }] }`;
+3. **keeps only the ids ending in `-free`** as the provider's catalog;
+4. falls back to the configured `models` when the fetch fails
+   (network/timeout/non-200) or the filter matches nothing.
+
+That catalog is **fully managed**: the guard rewrites it back to the upstream
+result on every settings change, and the UI locks the model inputs plus the
+add/remove-model and "Fetch available models" / "Restore defaults" actions, so a
+manual edit is never silently reverted.
+
+> The rule currently applies to **`free-zen` only** (declared per route in
+> `UPSTREAM_MODEL_CATALOG` in `src/config.ts`); every other provider's `models`
+> stays under your control.
+
 ## How it works
 
 The plugin registers no adapter of its own; it writes the managed providers
 into the stock `llm-pi-ai` settings namespace, served by the pi-ai adapter:
 
-- **Load** — merges the local and remote JSON documents at startup.
+- **Load** — merges the local and remote JSON documents at startup, then
+  resolves each dynamic provider's catalog.
 - **Seed** — ensures `llm-pi-ai.providers.<route>` exists with
   `displayName`, `apiKeyEnv`, `api` and `baseURL` equal to the configured
   values, and stores the fixed keys through the credentials seam.
 - **Guard** — listens to `settings/updated` for the `llm-pi-ai` namespace and
   re-asserts the protected fields after every change: editing the URL, changing
   the key reference, or deleting a whole provider is reverted right after the
-  write. `models` is never touched. It also listens to `credentials/updated`
-  and restores the fixed keys. The guard only touches the managed routes;
-  providers you configured yourself are never affected.
+  write. A static provider's `models` is never touched; a dynamic provider's
+  (`free-zen`) `models` is re-asserted to the upstream result. It also listens
+  to `credentials/updated` and restores the fixed keys. The guard only touches
+  the managed routes; providers you configured yourself are never affected.
 - **Client lock** — the host serves the client-safe managed list at
-  `/dsh-fixed-providers/managed.json` (routes + display names only, **no
-  secrets**); the browser half disables the API-key / base-URL /
-  display-name / API-protocol inputs of those rows and hides their delete
-  button and "Custom" tag. The model lists remain editable.
+  `/dsh-fixed-providers/managed.json` (routes, display names and a
+  "models-locked" flag only, **no secrets**); the browser half disables the
+  API-key / base-URL / display-name / API-protocol inputs of those rows and
+  hides their delete button and "Custom" tag. For a dynamic provider it also
+  disables the model inputs and hides the add/remove-model, fetch and
+  restore-default actions.
 
 Even if you edit `settings.yaml` or `credentials.yaml` directly, protected
 fields are restored on the next settings change (or restart).
@@ -135,7 +166,7 @@ client bundle join the boot manifest, then refresh the page.
 | Model calls | Go through the `llm-pi-ai` adapter, identical to configuring these providers by hand. |
 | Session logs | Untouched. |
 | Permissions | Writes only the managed routes of the `llm-pi-ai` settings section and the fixed credential refs; never touches providers you configured yourself or other settings such as `agent-default-model`. |
-| Network | One GET to `remoteUrl` at startup (10s timeout); a failure does not affect the local configuration. |
+| Network | One GET to `remoteUrl` at startup (10s timeout), plus one GET to each dynamic provider's (`free-zen`) upstream `/models` (also 10s timeout); a failure does not affect the local configuration. |
 
 ## Development
 
@@ -152,7 +183,8 @@ pnpm run build    # esbuild host + client bundles, tsc declarations
 Changing the **configuration does not require a rebuild**: edit
 `$DSH_HOME/dsh-fixed-providers.json` (or the package's `providers.json`) and
 restart the web server; the guard then updates the old values to the new
-configuration (model lists are preserved).
+configuration (static providers keep their model lists; `free-zen` re-fetches
+from upstream).
 
 Changing **code** (defaults, paths, timeouts) requires `pnpm run build` and a
 reinstall.
@@ -166,6 +198,12 @@ reinstall.
   after the last write — eventually consistent.
 - Configuration is read **at startup**; changing a JSON file (local or remote)
   requires a server restart.
+- `free-zen`'s catalog is fetched **once at startup**; upstream additions and
+  removals only appear after a server restart. When upstream is unreachable or
+  the filter matches nothing, the configured `models` fallback is used.
+- `free-zen`'s model editor is locked in the UI and reverted server-side, so its
+  models **cannot be edited by hand** — this is the intended fully-managed
+  behavior.
 - If several providers share one `apiKeyEnv`, the plugin enforces one of their
   `key` values (use the same key for shared references).
 - The "Custom" tag is hidden, but the directory entry is still flagged as

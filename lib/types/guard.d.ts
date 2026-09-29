@@ -14,8 +14,8 @@ export type ProviderProfiles = Record<string, unknown> | undefined;
 export declare function fixedProfile(fixed: FixedProvider): Record<string, unknown>;
 /**
  * The settings profile fields this plugin re-asserts on every change.
- * Everything else in a managed profile — most importantly `models` — is left
- * to the user.
+ * Everything else in a managed profile — most importantly `models` for a
+ * static provider — is left to the user.
  */
 export declare const PROTECTED_KEYS: readonly ["displayName", "apiKeyEnv", "api", "baseURL"];
 /**
@@ -23,8 +23,10 @@ export declare const PROTECTED_KEYS: readonly ["displayName", "apiKeyEnv", "api"
  *
  * - A missing managed route is recreated wholesale (with the default models).
  * - A present route's protected fields are re-asserted one by one.
- * - Everything else — the user's `models` list, extra profile fields — is
- *   never touched.
+ * - For an upstream-sourced provider (`dynamicModels`) the `models` list is
+ *   re-asserted too, so the catalog keeps tracking the upstream endpoint.
+ * - Everything else — a static provider's `models` list, extra profile fields
+ *   — is never touched.
  *
  * @param providers - the resolved `providers` dict of `llm-pi-ai`.
  * @param fixed - the managed provider definitions to enforce.
