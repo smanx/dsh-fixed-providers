@@ -119,13 +119,15 @@ into the stock `llm-pi-ai` settings namespace, served by the pi-ai adapter:
 - **Seed** — ensures `llm-pi-ai.providers.<route>` exists with
   `displayName`, `apiKeyEnv`, `api` and `baseURL` equal to the configured
   values, and stores the fixed keys through the credentials seam.
-- **Guard** — listens to `settings/updated` for the `llm-pi-ai` namespace and
-  re-asserts the protected fields after every change: editing the URL, changing
-  the key reference, or deleting a whole provider is reverted right after the
-  write. A static provider's `models` is never touched; a dynamic provider's
-  (`free-zen`) `models` is re-asserted to the upstream result. It also listens
-  to `credentials/updated` and restores the fixed keys. The guard only touches
-  the managed routes; providers you configured yourself are never affected.
+- **Guard** — listens to `settings/document-updated` for the `llm-pi-ai`
+  namespace, re-reads that namespace and re-asserts the protected fields after
+  every change: editing the URL, changing the key reference, or deleting a
+  whole provider is reverted right after the write. A static provider's
+  `models` is never touched; a dynamic provider's (`free-zen`) `models` is
+  re-asserted to the upstream result. It also listens to
+  `credentials/reference-updated` and restores the fixed keys. The guard only
+  touches the managed routes; providers you configured yourself are never
+  affected.
 - **Client lock** — the host serves the client-safe managed list at
   `/dsh-fixed-providers/managed.json` (routes, display names and a
   "models-locked" flag only, **no secrets**); the browser half disables the
@@ -157,6 +159,13 @@ client bundle join the boot manifest, then refresh the page.
 > Requires `@deepseek-ai/dsh-llm-pi-ai` in the profile (shipped with
 > `dsh-web-app`). In environments without `settings` / `credentials` seams
 > (e.g. pure headless), the plugin stays dormant.
+
+> Compatibility: built against the settings/credentials seam shipped with
+> `@deepseek-ai/dsh@0.1.7-rc.2` — settings are read through
+> `settings.describe()`, and changes arrive as `settings/document-updated` and
+> `credentials/reference-updated`. Older harness builds exposing the removed
+> `settings.get()` / `settings/updated` / `credentials/updated` API are not
+> supported.
 
 ## Dependencies & boundaries
 

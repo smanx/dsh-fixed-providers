@@ -91,7 +91,7 @@
 
 - **加载**：启动时按上述流程读取本地 + 远端 JSON 并合并，再解析动态提供商的模型目录，得到托管提供商集合。
 - **种子（seed）**：确认 `llm-pi-ai.providers.<route>` 存在，`displayName`、`apiKeyEnv`、`api`、`baseURL` 与配置一致（缺失就创建，被改就改回）；把带 `key` 的提供商的固定密钥写入凭证库。
-- **守护（guard）**：监听 `settings/updated`（`llm-pi-ai` 命名空间），每次变更后重新断言受保护字段——改 URL、改密钥引用、删除整个提供商都会在写入后立即被还原。静态提供商的 `models` 一律不碰；动态提供商（free-zen）的 `models` 会一并还原为上游结果。监听 `credentials/updated`，密钥被覆盖或删除时恢复固定值。守护**只作用于托管 route**，你自行配置的其他提供商完全不受影响。
+- **守护（guard）**：监听 `settings/document-updated`（`llm-pi-ai` 命名空间），每次变更后重新读取该命名空间并断言受保护字段——改 URL、改密钥引用、删除整个提供商都会在写入后立即被还原。静态提供商的 `models` 一律不碰；动态提供商（free-zen）的 `models` 会一并还原为上游结果。监听 `credentials/reference-updated`，密钥被覆盖或删除时恢复固定值。守护**只作用于托管 route**，你自行配置的其他提供商完全不受影响。
 - **客户端锁定**：宿主在 `/dsh-fixed-providers/managed.json` 提供**客户端安全名单**（只有 route、显示名与“模型是否锁定”标志，**不含任何密钥**）；浏览器端据此把这些行的“API 密钥 / API 地址 / 显示名称 / API 协议”输入框置为禁用，并隐藏删除按钮与“Custom”标签；对动态提供商还会禁用模型编辑框并隐藏增删模型 / 获取模型 / 恢复默认按钮。
 
 所以即使绕过 UI 直接改 `settings.yaml` 或 `credentials.yaml`，受保护字段也会在下一次设置变更（或重启）时被还原。
@@ -113,6 +113,8 @@ dsh plugin --profile web add file:C:/mydata/codes/dsh-fixed-providers
 安装完成后**重启一次 Web 服务器**，让新的宿主插件与客户端 bundle 编入启动清单，然后刷新页面。
 
 > 前提：profile 里已包含 `@deepseek-ai/dsh-llm-pi-ai`（`dsh-web-app` 自带）。没有 `settings` / `credentials` 服务的环境（如纯 headless）插件会自动休眠。
+
+> 兼容性：插件按 `@deepseek-ai/dsh@0.1.7-rc.2` 起的设置/凭证接缝编写——设置读取走 `settings.describe()`，变更事件为 `settings/document-updated` 与 `credentials/reference-updated`。更早的 harness 版本暴露的是已被移除的 `settings.get()` / `settings/updated` / `credentials/updated`，不再支持。
 
 ## 依赖与边界
 

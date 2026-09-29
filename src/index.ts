@@ -12,12 +12,12 @@
  *    (served by the stock pi-ai adapter) with their fixed
  *    `displayName` / `apiKeyEnv` / `api` / `baseURL`, and stores the fixed API
  *    keys through the credentials seam.
- * 3. **Guards** — on every `settings/updated` for `llm-pi-ai` it re-asserts
- *    the protected fields (reverting edits and re-creating deleted routes),
- *    and on every `credentials/updated` it restores the fixed keys. A static
- *    provider's `models` list is never touched; an upstream-sourced provider
- *    (`dynamicModels`) has its `models` re-asserted too, so its catalog keeps
- *    tracking the upstream `/models` endpoint.
+ * 3. **Guards** — on every `settings/document-updated` for `llm-pi-ai` it
+ *    re-asserts the protected fields (reverting edits and re-creating deleted
+ *    routes), and on every `credentials/reference-updated` it restores the
+ *    fixed keys. A static provider's `models` list is never touched; an
+ *    upstream-sourced provider (`dynamicModels`) has its `models` re-asserted
+ *    too, so its catalog keeps tracking the upstream `/models` endpoint.
  * 4. **Serves** a client-safe JSON list of the managed providers (routes +
  *    display names only, no secrets) so the browser half can lock their
  *    URL/key inputs in the Models page.
@@ -25,7 +25,7 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import { credentialRef, type CredentialProvider, type CredentialRef } from '@deepseek-ai/dsh-credentials'
-import { type SettingsProvider } from '@deepseek-ai/dsh-settings'
+import { type SettingsDescriptor } from '@deepseek-ai/dsh-settings'
 // Type-only import: activates the `ctx.webServer` augmentation.
 import type {} from '@deepseek-ai/dsh-host-webserver'
 import type { IncomingMessage, ServerResponse } from 'node:http'
@@ -86,7 +86,7 @@ export async function apply(ctx: Context): Promise<void> {
   })
 
   ctx.inject(['settings', 'credentials'], (sctx) => {
-    const settings: SettingsProvider = sctx.settings
+    const settings = sctx.settings
     const credentials: CredentialProvider = sctx.credentials
 
     /** Restore one managed credential to its fixed value. Converges by design. */
@@ -131,12 +131,28 @@ export async function apply(ctx: Context): Promise<void> {
       for (const ref of managedRefs) await restoreCredential(ref)
     }
 
+    /**
+     * Read the live `llm-pi-ai` descriptor. The settings seam exposes no
+     * per-namespace getter any more: `describe()` is the read path, and its
+     * unredacted `value` carries the `providers` dict the guard enforces. The
+     * namespace is absent until the owning entry has started, hence undefined.
+     */
+    const readNamespace = (): SettingsDescriptor | undefined => {
+      try {
+        return settings.describe().find((row) => String(row.ns) === NS)
+      } catch (error) {
+        ctx.logger.warn('@smanx/dsh-fixed-providers: could not read the llm-pi-ai settings namespace')
+        ctx.logger.warn(error)
+        return undefined
+      }
+    }
+
     /** Seed the managed profiles once the llm-pi-ai namespace is registered. */
     const seedSettings = async (): Promise<void> => {
       for (let attempt = 0; attempt < SEED_TRIES; attempt += 1) {
-        const current = settings.get(NS)
-        if (current !== undefined) {
-          await enforceFrom(current)
+        const descriptor = readNamespace()
+        if (descriptor !== undefined) {
+          await enforceFrom(descriptor.value)
           return
         }
         await delay(SEED_DELAY_MS)
@@ -146,12 +162,15 @@ export async function apply(ctx: Context): Promise<void> {
       )
     }
 
-    // Guards first: no user change can escape while seeding runs.
-    ctx.on('settings/updated', (ns, next) => {
-      if (ns !== NS) return
-      void enforceFrom(next)
+    // Guards first: no user change can escape while seeding runs. The settings
+    // event reports a change by revision only, so the current value is re-read
+    // from the descriptor rather than taken from the event payload.
+    ctx.on('settings/document-updated', (ns) => {
+      if (String(ns) !== NS) return
+      const descriptor = readNamespace()
+      if (descriptor !== undefined) void enforceFrom(descriptor.value)
     })
-    ctx.on('credentials/updated', (ref) => {
+    ctx.on('credentials/reference-updated', (ref) => {
       if (!managedRefs.has(ref)) return
       void restoreCredential(ref)
     })

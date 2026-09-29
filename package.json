@@ -1,7 +1,7 @@
 {
   "name": "@smanx/dsh-fixed-providers",
   "description": "Managed built-in LLM providers for DeepSeek Harness: OpenAI-compatible providers with plugin-locked base URL and API key; model lists are editable except free-zen's, which is fetched from upstream.",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "license": "MIT",
   "type": "module",
   "main": "lib/index.js",
@@ -61,11 +61,11 @@
     }
   },
   "devDependencies": {
-    "@deepseek-ai/cordis": "4.0.1",
-    "@deepseek-ai/dsh-credentials": "0.1.0-rc.6",
-    "@deepseek-ai/dsh-home-paths": "0.1.0-rc.6",
-    "@deepseek-ai/dsh-host-webserver": "0.1.0-rc.6",
-    "@deepseek-ai/dsh-settings": "0.1.0-rc.6",
+    "@deepseek-ai/cordis": "4.0.4",
+    "@deepseek-ai/dsh-credentials": "0.1.7-rc.2",
+    "@deepseek-ai/dsh-home-paths": "0.1.7-rc.2",
+    "@deepseek-ai/dsh-host-webserver": "0.1.7-rc.2",
+    "@deepseek-ai/dsh-settings": "0.1.7-rc.2",
     "@types/node": "^24.0.0",
     "esbuild": "^0.25.0",
     "jsdom": "^26.1.0",
